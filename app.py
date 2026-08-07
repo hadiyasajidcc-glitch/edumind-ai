@@ -1,16 +1,17 @@
 import os
 import re
+import requests
 import streamlit as st
 import pypdf
 import docx
 import pptx
 from groq import Groq
 from dotenv import load_dotenv
-from youtube_transcript_api import YouTubeTranscriptApi
 
 # Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+SUPADATA_API_KEY = os.getenv("SUPADATA_API_KEY", "")
 
 # ---------------------------------------------------------
 # Page Configuration
@@ -134,39 +135,34 @@ def extract_text_from_file(file):
         return str(file.read(), "utf-8")
     return ""
 
-def get_youtube_video_id(url):
-    """Extracts 11-character video ID from any YouTube URL format."""
-    patterns = [
-        r"(?:v=|\/)([0-9A-Za-z_-]{11})(?:[\?&]|$)",
-        r"youtu\.be\/([0-9A-Za-z_-]{11})",
-        r"embed\/([0-9A-Za-z_-]{11})"
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
-
 def extract_text_from_youtube(url):
-    video_id = get_youtube_video_id(url)
-    if not video_id:
-        return None, "Invalid YouTube URL format."
+    api_key = os.getenv("SUPADATA_API_KEY", "")
+    if not api_key:
+        return None, "Supadata API key missing. Please check your .env or Streamlit Secrets."
+
+    endpoint = "https://api.supadata.ai/v1/youtube/transcript"
+    headers = {"x-api-key": api_key}
+    params = {"url": url, "text": "true"}
     
     try:
-        # Check for both class instance method (new v1.x) and static method (older)
-        if hasattr(YouTubeTranscriptApi, 'get_transcript'):
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        response = requests.get(endpoint, headers=headers, params=params, timeout=20)
+        data = response.json()
+        
+        if response.status_code == 200:
+            content = data.get("content", "")
+            if isinstance(content, str) and content.strip():
+                return content.strip(), None
+            elif isinstance(content, list):
+                full_text = " ".join([item.get("text", "") for item in content if "text" in item])
+                if full_text.strip():
+                    return full_text.strip(), None
+            return None, "No transcript text found for this video."
         else:
-            ytt_api = YouTubeTranscriptApi()
-            transcript = ytt_api.fetch(video_id)
+            error_msg = data.get("message", f"HTTP {response.status_code} Error")
+            return None, f"Supadata API Error: {error_msg}"
             
-        full_text = " ".join([
-            item['text'] if isinstance(item, dict) else item.text 
-            for item in transcript
-        ])
-        return full_text, None
     except Exception as e:
-        return None, f"Could not retrieve transcript: {e}. Make sure closed captions (CC) are enabled for this video."
+        return None, f"Network request failed: {str(e)}"
 
 def ask_groq(client, prompt):
     try:
@@ -184,19 +180,19 @@ def ask_groq(client, prompt):
         return "An error occurred while generating content."
 
 # ---------------------------------------------------------
-# UI Header
+# UI Header & API Check
 # ---------------------------------------------------------
 st.markdown('<div class="main-header">🎓 EduMind AI Study Partner</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Transform lengthy lectures, videos, and documents into instant notes & practice quizzes.</div>', unsafe_allow_html=True)
 
 if not GROQ_API_KEY:
-    st.error("❌ Groq API key not found in .env file!")
+    st.error("❌ Groq API key not found! Please check your .env or Streamlit Secrets.")
     st.stop()
 
 client = Groq(api_key=GROQ_API_KEY)
 
 # ---------------------------------------------------------
-# Sidebar
+# Sidebar Input Handling
 # ---------------------------------------------------------
 with st.sidebar:
     st.markdown("### 📥 Material Source")
@@ -223,7 +219,7 @@ with st.sidebar:
         if yt_url:
             source_identifier = yt_url
             if "current_source" not in st.session_state or st.session_state.current_source != source_identifier:
-                with st.spinner("🎥 Extracting video transcript..."):
+                with st.spinner("🎥 Extracting video transcript via Supadata..."):
                     text, err = extract_text_from_youtube(yt_url)
                     if err:
                         st.error(err)
@@ -231,7 +227,7 @@ with st.sidebar:
                         extracted_text = text
 
 # ---------------------------------------------------------
-# Processing Logic
+# Session State Processing
 # ---------------------------------------------------------
 if source_identifier and extracted_text:
     if "current_source" not in st.session_state or st.session_state.current_source != source_identifier:
@@ -244,7 +240,7 @@ if source_identifier and extracted_text:
             st.session_state.notes = ask_groq(client, notes_prompt)
 
 # ---------------------------------------------------------
-# Main Workspaces
+# Workspaces
 # ---------------------------------------------------------
 if "doc_text" in st.session_state and st.session_state.doc_text:
     tab1, tab2, tab3 = st.tabs(["📝 Lecture Notes", "💬 AI Tutor & Voice", "🧩 Practice Quiz"])

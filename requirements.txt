@@ -4,4 +4,4 @@ pypdf
 python-docx
 python-pptx
 python-dotenv
-youtube-transcript-api
+requests
