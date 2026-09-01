@@ -17,7 +17,6 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* Smooth CSS Keyframe Animations */
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(12px); }
         to { opacity: 1; transform: translateY(0); }
@@ -35,21 +34,18 @@ st.markdown("""
         100% { transform: translateY(0px); }
     }
 
-    /* Overall Page Aesthetics */
     .stApp {
         background: linear-gradient(135deg, #FFF0F5 0%, #FFE4E1 100%);
         color: #2D2D2D;
         animation: fadeIn 0.8s ease-in-out;
     }
 
-    /* Sidebar Design */
     div[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #FFE4E1 0%, #FFF0F5 100%);
         border-right: 2px solid #FFB6C1;
         box-shadow: 2px 0px 10px rgba(255, 182, 193, 0.3);
     }
 
-    /* Headings & Title Glow */
     h1, h2, h3, .stTitle {
         color: #C71585 !important;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -61,7 +57,6 @@ st.markdown("""
         transform: scale(1.01);
     }
 
-    /* Cute Animated Buttons */
     .stButton>button {
         background: linear-gradient(45deg, #D87093, #FF69B4);
         color: white;
@@ -84,7 +79,6 @@ st.markdown("""
         transform: translateY(1px);
     }
 
-    /* Animated Tabs */
     .stTabs [data-baseweb="tab-list"] button {
         transition: all 0.3s ease;
         border-radius: 8px;
@@ -103,7 +97,6 @@ st.markdown("""
         animation: pulseGlow 2s infinite;
     }
 
-    /* Soft Text Box Styling */
     .stTextInput>div>div>input {
         border: 2px solid #FFB6C1;
         border-radius: 10px;
@@ -115,7 +108,6 @@ st.markdown("""
         box-shadow: 0 0 8px rgba(199, 21, 133, 0.3);
     }
 
-    /* Cute Floating Element Accent */
     .floating-badge {
         display: inline-block;
         animation: floatIcon 3s ease-in-out infinite;
@@ -132,7 +124,7 @@ SUPADATA_API_KEY = st.secrets.get("SUPADATA_API_KEY") or os.getenv("SUPADATA_API
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 # -----------------------------------------------------------------------------
-# FAIL-PROOF INFERENCE ENGINE (DYNAMIC + HARDCODED FALLBACKS)
+# FAIL-PROOF INFERENCE & TRANSCRIPTION ENGINE
 # -----------------------------------------------------------------------------
 def get_working_models(client):
     default_models = [
@@ -182,6 +174,22 @@ def ask_groq(client, prompt):
             
     st.error(f"❌ Groq API Error: Unable to communicate with models. Details: {last_error}")
     return "An error occurred while generating content."
+
+def transcribe_voice(client, audio_bytes):
+    """Transcribes user voice notes using Groq's Whisper API."""
+    if not client:
+        st.error("❌ Groq API Key missing.")
+        return ""
+    try:
+        transcription = client.audio.transcriptions.create(
+            file=("voice_input.wav", audio_bytes),
+            model="whisper-large-v3-turbo",
+            response_format="text"
+        )
+        return transcription.strip()
+    except Exception as e:
+        st.error(f"❌ Could not process audio: {e}")
+        return ""
 
 # -----------------------------------------------------------------------------
 # SAFE EXTRACTOR HELPERS
@@ -290,10 +298,25 @@ if extracted_text:
 
     with tab2:
         st.subheader("💬 Ask Your Material Anything")
-        user_q = st.text_input("Type your question about the content:")
-        if user_q:
+        
+        # Audio recorder widget for voice messages
+        audio_file = st.audio_input("🎙️ Record a Voice Message / Question:")
+        user_q = st.text_input("...or type your question here:")
+        
+        active_question = ""
+        
+        if audio_file is not None:
+            with st.spinner("Transcribing your voice message..."):
+                audio_bytes = audio_file.read()
+                active_question = transcribe_voice(groq_client, audio_bytes)
+                if active_question:
+                    st.info(f"🗣️ **Transcribed Question:** {active_question}")
+        elif user_q:
+            active_question = user_q
+            
+        if active_question:
             with st.spinner("Thinking..."):
-                prompt = f"Context:\n{extracted_text[:10000]}\n\nQuestion: {user_q}\nAnswer concisely and accurately."
+                prompt = f"Context:\n{extracted_text[:10000]}\n\nQuestion: {active_question}\nAnswer concisely and accurately."
                 ans = ask_groq(groq_client, prompt)
                 st.write(ans)
 
