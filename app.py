@@ -105,20 +105,30 @@ def extract_pptx(file):
 
 # Helper: Groq Inference Call
 def ask_groq(client, prompt):
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": "You are EduMind AI, a world-class academic tutor. Present information cleanly with headings, key points, and clear formatting."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.5
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        st.error(f"Error calling Groq: {e}")
-        return "An error occurred while generating content."
-
+    # Try production models in order of preference
+    models_to_try = [
+        "llama-3.3-70b-versatile",
+        "llama3-70b-8192",
+        "llama3-8b-8192"
+    ]
+    
+    for model_name in models_to_try:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": "You are EduMind AI, a world-class academic tutor. Present information cleanly with headings, key points, and clear formatting."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.5
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            # If a model fails, try the next fallback model in the list
+            continue
+            
+    st.error("❌ Unable to connect to Groq models. Please check your API key in Streamlit Secrets.")
+    return "An error occurred while generating content."
 # Sidebar Input Options
 st.sidebar.title("🌸 Material Source")
 input_mode = st.sidebar.radio("Select Input Mode:", ["Document Upload", "YouTube Video Link"])
