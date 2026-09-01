@@ -6,14 +6,15 @@ import pypdf
 import docx
 import pptx
 
-# Page configuration
+# -----------------------------------------------------------------------------
+# PAGE CONFIGURATION & PINK THEME STYLING
+# -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="EduMind AI | Academic Hub",
     page_icon="🎓",
     layout="wide"
 )
 
-# Custom Pink Styling (Light Pink Background & Dark Pink Accent Elements)
 st.markdown("""
     <style>
     .stApp {
@@ -51,20 +52,57 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# API Keys Initialization
+# -----------------------------------------------------------------------------
+# API INITIALIZATION
+# -----------------------------------------------------------------------------
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
 SUPADATA_API_KEY = st.secrets.get("SUPADATA_API_KEY") or os.getenv("SUPADATA_API_KEY")
 
-if not GROQ_API_KEY:
-    st.error("❌ Groq API key not found! Please check your Streamlit Secrets.")
-    st.stop()
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+# -----------------------------------------------------------------------------
+# FAIL-PROOF INFERENCE ENGINE (AUTOFALLBACK ACROSS GROQ MODELS)
+# -----------------------------------------------------------------------------
+def ask_groq(client, prompt):
+    if not client:
+        st.error("❌ Groq API key is missing. Add GROQ_API_KEY in Streamlit Secrets.")
+        return "API Key Error."
+        
+    candidate_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-70b-8192",
+        "llama3-8b-8192"
+    ]
+    
+    system_instruction = (
+        "You are EduMind AI, a world-class academic tutor. "
+        "Present information cleanly with headings, key points, and clear formatting."
+    )
+    
+    for model_name in candidate_models:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.5
+            )
+            return response.choices[0].message.content
+        except Exception:
+            continue
+            
+    st.error("❌ Groq API Error: Check if your API Key is active in Streamlit Secrets.")
+    return "An error occurred while communicating with the AI model."
 
-# Helper: Extract YouTube Transcript via Supadata
+# -----------------------------------------------------------------------------
+# EXTRACTOR HELPERS
+# -----------------------------------------------------------------------------
 def get_youtube_transcript(url):
     if not SUPADATA_API_KEY:
-        st.error("❌ Supadata API key is missing in Streamlit Secrets.")
+        st.error("❌ Supadata API key missing in Streamlit Secrets.")
         return None
     endpoint = f"https://api.supadata.ai/v1/youtube/transcript?url={url}"
     headers = {"x-api-key": SUPADATA_API_KEY}
@@ -76,13 +114,12 @@ def get_youtube_transcript(url):
             full_text = " ".join([item.get("text", "") for item in content])
             return full_text if full_text.strip() else None
         else:
-            st.error(f"Supadata API Error ({res.status_code}): {res.text}")
+            st.error(f"Supadata Error ({res.status_code}): {res.text}")
             return None
     except Exception as e:
-        st.error(f"Failed to fetch YouTube transcript: {e}")
+        st.error(f"Failed to fetch transcript: {e}")
         return None
 
-# Helper: Document Text Extractors
 def extract_pdf(file):
     reader = pypdf.PdfReader(file)
     text = ""
@@ -103,33 +140,9 @@ def extract_pptx(file):
                 text += shape.text + "\n"
     return text
 
-# Helper: Groq Inference Call
-def ask_groq(client, prompt):
-    # Try production models in order of preference
-    models_to_try = [
-        "llama-3.3-70b-versatile",
-        "llama3-70b-8192",
-        "llama3-8b-8192"
-    ]
-    
-    for model_name in models_to_try:
-        try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": "You are EduMind AI, a world-class academic tutor. Present information cleanly with headings, key points, and clear formatting."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.5
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            # If a model fails, try the next fallback model in the list
-            continue
-            
-    st.error("❌ Unable to connect to Groq models. Please check your API key in Streamlit Secrets.")
-    return "An error occurred while generating content."
-# Sidebar Input Options
+# -----------------------------------------------------------------------------
+# APPLICATION USER INTERFACE
+# -----------------------------------------------------------------------------
 st.sidebar.title("🌸 Material Source")
 input_mode = st.sidebar.radio("Select Input Mode:", ["Document Upload", "YouTube Video Link"])
 
@@ -154,7 +167,6 @@ elif input_mode == "YouTube Video Link":
             if extracted_text:
                 st.sidebar.success("Transcript loaded successfully!")
 
-# Main Dashboard Interface
 st.title("🎓 EduMind AI Study Partner")
 st.write("Transform lengthy lectures, videos, and documents into instant notes & practice quizzes.")
 
