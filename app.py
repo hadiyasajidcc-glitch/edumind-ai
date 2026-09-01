@@ -167,7 +167,7 @@ def extract_text_from_youtube(url):
 def ask_groq(client, prompt):
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-70b-versatile",
             messages=[
                 {"role": "system", "content": "You are EduMind AI, a world-class academic tutor. Present information cleanly with headings, key points, and clear formatting."},
                 {"role": "user", "content": prompt}
