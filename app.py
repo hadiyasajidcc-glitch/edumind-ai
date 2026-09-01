@@ -6,99 +6,245 @@ import pypdf
 import docx
 import pptx
 
-# Page Configuration & Pink Styling
-st.set_page_config(page_title="EduMind AI | Academic Hub", page_icon="🎓", layout="wide")
+# -----------------------------------------------------------------------------
+# PAGE CONFIGURATION & ANIMATED PINK AESTHETIC STYLING
+# -----------------------------------------------------------------------------
+st.set_page_config(
+    page_title="EduMind AI | Academic Hub",
+    page_icon="🎓",
+    layout="wide"
+)
 
 st.markdown("""
     <style>
-    .stApp { background-color: #FFF0F5; color: #2D2D2D; }
-    div[data-testid="stSidebar"] { background-color: #FFE4E1; border-right: 2px solid #FFB6C1; }
-    h1, h2, h3, .stTitle { color: #C71585 !important; font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; }
-    .stButton>button { background-color: #D87093; color: white; border-radius: 8px; border: none; font-weight: bold; }
-    .stButton>button:hover { background-color: #C71585; color: white; }
-    .stTextInput>div>div>input { border: 1px solid #FFB6C1; border-radius: 6px; }
-    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] { color: #C71585 !important; border-bottom-color: #C71585 !important; }
+    /* Smooth CSS Keyframe Animations */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulseGlow {
+        0% { box-shadow: 0 0 5px rgba(255, 182, 193, 0.4); }
+        50% { box-shadow: 0 0 18px rgba(199, 21, 133, 0.5); }
+        100% { box-shadow: 0 0 5px rgba(255, 182, 193, 0.4); }
+    }
+
+    @keyframes floatIcon {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-6px); }
+        100% { transform: translateY(0px); }
+    }
+
+    /* Overall Page Aesthetics */
+    .stApp {
+        background: linear-gradient(135deg, #FFF0F5 0%, #FFE4E1 100%);
+        color: #2D2D2D;
+        animation: fadeIn 0.8s ease-in-out;
+    }
+
+    /* Sidebar Design */
+    div[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #FFE4E1 0%, #FFF0F5 100%);
+        border-right: 2px solid #FFB6C1;
+        box-shadow: 2px 0px 10px rgba(255, 182, 193, 0.3);
+    }
+
+    /* Headings & Title Glow */
+    h1, h2, h3, .stTitle {
+        color: #C71585 !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        text-shadow: 1px 1px 2px rgba(255, 182, 193, 0.6);
+        transition: all 0.3s ease;
+    }
+    
+    h1:hover {
+        transform: scale(1.01);
+    }
+
+    /* Cute Animated Buttons */
+    .stButton>button {
+        background: linear-gradient(45deg, #D87093, #FF69B4);
+        color: white;
+        border-radius: 12px;
+        border: none;
+        padding: 0.6rem 1.2rem;
+        font-weight: bold;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 4px 10px rgba(216, 112, 147, 0.3);
+    }
+
+    .stButton>button:hover {
+        background: linear-gradient(45deg, #C71585, #D87093);
+        color: white;
+        transform: translateY(-3px) scale(1.02);
+        box-shadow: 0 8px 18px rgba(199, 21, 133, 0.4);
+    }
+    
+    .stButton>button:active {
+        transform: translateY(1px);
+    }
+
+    /* Animated Tabs */
+    .stTabs [data-baseweb="tab-list"] button {
+        transition: all 0.3s ease;
+        border-radius: 8px;
+        padding: 8px 16px;
+    }
+    
+    .stTabs [data-baseweb="tab-list"] button:hover {
+        background-color: rgba(255, 182, 193, 0.3);
+        color: #C71585 !important;
+    }
+
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        color: #C71585 !important;
+        border-bottom-color: #C71585 !important;
+        font-weight: bold;
+        animation: pulseGlow 2s infinite;
+    }
+
+    /* Soft Text Box Styling */
+    .stTextInput>div>div>input {
+        border: 2px solid #FFB6C1;
+        border-radius: 10px;
+        transition: all 0.3s ease;
+    }
+
+    .stTextInput>div>div>input:focus {
+        border-color: #C71585;
+        box-shadow: 0 0 8px rgba(199, 21, 133, 0.3);
+    }
+
+    /* Cute Floating Element Accent */
+    .floating-badge {
+        display: inline-block;
+        animation: floatIcon 3s ease-in-out infinite;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# API Keys
+# -----------------------------------------------------------------------------
+# API KEYS INITIALIZATION
+# -----------------------------------------------------------------------------
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
 SUPADATA_API_KEY = st.secrets.get("SUPADATA_API_KEY") or os.getenv("SUPADATA_API_KEY")
 
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-# PERMANENT FIX: Dynamically find whatever model is active on Groq right now
-def get_working_model(client):
+# -----------------------------------------------------------------------------
+# FAIL-PROOF INFERENCE ENGINE (DYNAMIC + HARDCODED FALLBACKS)
+# -----------------------------------------------------------------------------
+def get_working_models(client):
+    default_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-70b-8192",
+        "llama3-8b-8192"
+    ]
     try:
-        available_models = [m.id for m in client.models.list().data]
-        # Prefer 70b or versatile models if present, otherwise grab whatever is active
-        for model in available_models:
-            if "70b" in model or "versatile" in model or "instant" in model:
-                return model
-        return available_models[0] if available_models else "llama-3.3-70b-versatile"
+        live_models = client.models.list().data
+        chat_models = [
+            m.id for m in live_models 
+            if "whisper" not in m.id.lower() and 
+            any(k in m.id.lower() for k in ["llama", "mixtral", "gemma", "gpt-oss"])
+        ]
+        combined = chat_models + [m for m in default_models if m not in chat_models]
+        return combined if combined else default_models
     except Exception:
-        return "llama-3.3-70b-versatile"
+        return default_models
 
 def ask_groq(client, prompt):
     if not client:
         st.error("❌ Groq API key is missing. Add GROQ_API_KEY in Streamlit Secrets.")
         return "API Key Error."
         
-    active_model = get_working_model(client)
+    candidate_models = get_working_models(client)
+    system_instruction = (
+        "You are EduMind AI, a world-class academic tutor. "
+        "Present information cleanly with headings, key points, and clear formatting."
+    )
     
-    try:
-        response = client.chat.completions.create(
-            model=active_model,
-            messages=[
-                {"role": "system", "content": "You are EduMind AI, a world-class academic tutor. Present information cleanly with headings, key points, and clear formatting."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.5
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        st.error(f"❌ API Call Error ({active_model}): {e}")
-        return "An error occurred while generating content."
+    last_error = ""
+    for model_name in candidate_models:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.5
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            last_error = str(e)
+            continue
+            
+    st.error(f"❌ Groq API Error: Unable to communicate with models. Details: {last_error}")
+    return "An error occurred while generating content."
 
-# Extraction Functions
+# -----------------------------------------------------------------------------
+# SAFE EXTRACTOR HELPERS
+# -----------------------------------------------------------------------------
 def get_youtube_transcript(url):
     if not SUPADATA_API_KEY:
-        st.error("❌ Supadata API key is missing in Streamlit Secrets.")
+        st.error("❌ Supadata API key missing in Streamlit Secrets.")
         return None
     endpoint = f"https://api.supadata.ai/v1/youtube/transcript?url={url}"
     headers = {"x-api-key": SUPADATA_API_KEY}
     try:
         res = requests.get(endpoint, headers=headers)
         if res.status_code == 200:
-            content = res.json().get("content", [])
+            data = res.json()
+            content = data.get("content", [])
             full_text = " ".join([item.get("text", "") for item in content])
             return full_text if full_text.strip() else None
         else:
-            st.error(f"Supadata API Error ({res.status_code}): {res.text}")
+            st.error(f"Supadata Error ({res.status_code}): {res.text}")
             return None
     except Exception as e:
         st.error(f"Failed to fetch transcript: {e}")
         return None
 
 def extract_pdf(file):
-    reader = pypdf.PdfReader(file)
-    return "".join([page.extract_text() or "" for page in reader.pages])
+    try:
+        reader = pypdf.PdfReader(file)
+        text = ""
+        for page in reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n"
+        return text if text.strip() else None
+    except Exception as e:
+        st.error(f"Error reading PDF: {e}")
+        return None
 
 def extract_docx(file):
-    doc = docx.Document(file)
-    return "\n".join([p.text for p in doc.paragraphs])
+    try:
+        doc = docx.Document(file)
+        text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+        return text if text.strip() else None
+    except Exception as e:
+        st.error(f"Error reading DOCX: {e}")
+        return None
 
 def extract_pptx(file):
-    prs = pptx.Presentation(file)
-    text = ""
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                text += shape.text + "\n"
-    return text
+    try:
+        prs = pptx.Presentation(file)
+        text = ""
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text:
+                    text += shape.text + "\n"
+        return text if text.strip() else None
+    except Exception as e:
+        st.error(f"Error reading PPTX: {e}")
+        return None
 
-# Main App Layout
-st.sidebar.title("🌸 Material Source")
+# -----------------------------------------------------------------------------
+# APPLICATION USER INTERFACE
+# -----------------------------------------------------------------------------
+st.sidebar.markdown("<h2 class='floating-badge'>🌸 Material Source</h2>", unsafe_allow_html=True)
 input_mode = st.sidebar.radio("Select Input Mode:", ["Document Upload", "YouTube Video Link"])
 
 extracted_text = ""
@@ -106,10 +252,19 @@ extracted_text = ""
 if input_mode == "Document Upload":
     uploaded_file = st.sidebar.file_uploader("Upload study file (.pdf, .docx, .pptx)", type=["pdf", "docx", "pptx"])
     if uploaded_file:
-        ext = uploaded_file.name.split(".")[-1].lower()
-        if ext == "pdf": extracted_text = extract_pdf(uploaded_file)
-        elif ext == "docx": extracted_text = extract_docx(uploaded_file)
-        elif ext == "pptx": extracted_text = extract_pptx(uploaded_file)
+        file_ext = uploaded_file.name.split(".")[-1].lower()
+        with st.spinner("Extracting document text..."):
+            if file_ext == "pdf":
+                extracted_text = extract_pdf(uploaded_file)
+            elif file_ext == "docx":
+                extracted_text = extract_docx(uploaded_file)
+            elif file_ext == "pptx":
+                extracted_text = extract_pptx(uploaded_file)
+            
+            if extracted_text:
+                st.sidebar.success("✨ Document loaded successfully!")
+            else:
+                st.sidebar.error("Could not extract readable text from file.")
 
 elif input_mode == "YouTube Video Link":
     yt_url = st.sidebar.text_input("YouTube Lecture URL:")
@@ -117,9 +272,9 @@ elif input_mode == "YouTube Video Link":
         with st.spinner("Fetching transcript via Supadata..."):
             extracted_text = get_youtube_transcript(yt_url)
             if extracted_text:
-                st.sidebar.success("Transcript loaded successfully!")
+                st.sidebar.success("✨ Transcript loaded successfully!")
 
-st.title("🎓 EduMind AI Study Partner")
+st.markdown("<h1 class='floating-badge'>🎓 EduMind AI Study Partner</h1>", unsafe_allow_html=True)
 st.write("Transform lengthy lectures, videos, and documents into instant notes & practice quizzes.")
 
 if extracted_text:
@@ -129,19 +284,25 @@ if extracted_text:
         st.subheader("📌 Smart Lecture Notes")
         if st.button("Generate Summary Notes"):
             with st.spinner("Summarizing material..."):
-                st.markdown(ask_groq(groq_client, f"Provide detailed, structured study notes with bullet points and key takeaways:\n\n{extracted_text[:12000]}"))
+                prompt = f"Provide detailed, structured study notes with bullet points and key takeaways for this content:\n\n{extracted_text[:12000]}"
+                notes = ask_groq(groq_client, prompt)
+                st.markdown(notes)
 
     with tab2:
         st.subheader("💬 Ask Your Material Anything")
         user_q = st.text_input("Type your question about the content:")
         if user_q:
             with st.spinner("Thinking..."):
-                st.write(ask_groq(groq_client, f"Context:\n{extracted_text[:10000]}\n\nQuestion: {user_q}\nAnswer concisely."))
+                prompt = f"Context:\n{extracted_text[:10000]}\n\nQuestion: {user_q}\nAnswer concisely and accurately."
+                ans = ask_groq(groq_client, prompt)
+                st.write(ans)
 
     with tab3:
         st.subheader("🧩 Practice Quiz")
         if st.button("⚡ Generate Practice Quiz"):
             with st.spinner("Creating 5-question quiz..."):
-                st.markdown(ask_groq(groq_client, f"Generate a 5-question multiple choice quiz with answer keys and explanations:\n\n{extracted_text[:10000]}"))
+                prompt = f"Generate a 5-question multiple choice quiz based on this text, complete with answer keys and explanations:\n\n{extracted_text[:10000]}"
+                quiz = ask_groq(groq_client, prompt)
+                st.markdown(quiz)
 else:
     st.info("👈 Please upload a document or paste a YouTube URL in the sidebar to begin.")
